@@ -1,6 +1,8 @@
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.SceneManagement;
 using System.Collections;
+using TMPro;
 
 public class GuideController : MonoBehaviour
 {
@@ -8,6 +10,7 @@ public class GuideController : MonoBehaviour
     public NavMeshAgent agent;       // 안내 캐릭터
     public Transform userCamera;     // 사용자 카메라
     public Animator dogAnimator;     // ★ 여기가 추가된 부분입니다! (강아지 애니메이터)
+    public ServerConnector serverConnector;  // 서버 통신용
 
     [Header("거리 설정")]
     public float waitDistance = 3.0f;
@@ -31,6 +34,14 @@ public class GuideController : MonoBehaviour
     public bool useVelocityRotation = true;
     public float rotationSpeed = 10f;  // 회전 속도
 
+    [Header("도착 감지 설정")]
+    public float arrivalThreshold = 1.5f;  // 도착 판정 거리
+    private bool hasArrived = false;
+
+    [Header("회수 확인 팝업")]
+    public GameObject recoveryPopup;      // 회수 확인 팝업 UI
+    public TMP_Text popupMessageText;     // 팝업 메시지 텍스트 (TextMeshPro)
+
     void OnEnable()
     {
         // Agent가 활성화될 때 멈춤 상태 초기화
@@ -48,6 +59,7 @@ public class GuideController : MonoBehaviour
     {
         isWaiting = false;
         timeSinceStart = 0f;
+        hasArrived = false;  // 도착 상태도 리셋
         if (agent != null)
         {
             agent.isStopped = false;
@@ -102,6 +114,19 @@ public class GuideController : MonoBehaviour
                     targetRotation,
                     Time.deltaTime * rotationSpeed
                 );
+            }
+        }
+
+        // --- 도착 감지 로직 ---
+        // Agent가 목적지에 도착했는지 확인
+        if (!hasArrived && agent.hasPath && !agent.pathPending)
+        {
+            if (agent.remainingDistance <= arrivalThreshold)
+            {
+                hasArrived = true;
+                agent.isStopped = true;
+                Debug.Log($"[GuideController] 목적지 도착! 분실물 ID: {NavigationData.targetItemId}");
+                ShowRecoveryPopup();
             }
         }
 
@@ -186,5 +211,86 @@ public class GuideController : MonoBehaviour
         agent.CompleteOffMeshLink();
 
         isTraversingLink = false;
+    }
+
+    // =====================================================
+    // 회수 확인 팝업 관련 메서드
+    // =====================================================
+
+    // 팝업 표시
+    void ShowRecoveryPopup()
+    {
+        if (recoveryPopup != null)
+        {
+            recoveryPopup.SetActive(true);
+
+            // 메시지 텍스트가 있으면 분실물 이름 표시
+            if (popupMessageText != null && !string.IsNullOrEmpty(NavigationData.targetItemLabel))
+            {
+                popupMessageText.text = $"'{NavigationData.targetItemLabel}'을(를) 회수하셨습니까?";
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[GuideController] recoveryPopup이 연결되지 않았습니다!");
+        }
+    }
+
+    // "예" 버튼 클릭 시 호출
+    public void OnRecoveryConfirm()
+    {
+        Debug.Log("[GuideController] 회수 확인됨!");
+
+        // 팝업 숨기기
+        if (recoveryPopup != null)
+        {
+            recoveryPopup.SetActive(false);
+        }
+
+        // 서버에 visibility 업데이트 요청
+        if (serverConnector != null && NavigationData.targetItemId > 0)
+        {
+            StartCoroutine(serverConnector.UpdateVisibility(
+                NavigationData.targetItemId,
+                "hidden",
+                (success) =>
+                {
+                    if (success)
+                    {
+                        Debug.Log("[GuideController] 분실물 회수 처리 완료!");
+                    }
+                    else
+                    {
+                        Debug.LogError("[GuideController] 분실물 회수 처리 실패!");
+                    }
+
+                    // 성공/실패 관계없이 목록 화면으로 돌아가기
+                    NavigationData.Clear();
+                    SceneManager.LoadScene("kitFind");
+                }
+            ));
+        }
+        else
+        {
+            Debug.LogWarning("[GuideController] ServerConnector가 없거나 유효한 ID가 없습니다.");
+            NavigationData.Clear();
+            SceneManager.LoadScene("kitFind");
+        }
+    }
+
+    // "아니오" 버튼 클릭 시 호출
+    public void OnRecoveryCancel()
+    {
+        Debug.Log("[GuideController] 회수 취소됨, 안내 계속");
+
+        // 팝업 숨기기
+        if (recoveryPopup != null)
+        {
+            recoveryPopup.SetActive(false);
+        }
+
+        // 다시 이동 가능하도록 리셋
+        hasArrived = false;
+        agent.isStopped = false;
     }
 }

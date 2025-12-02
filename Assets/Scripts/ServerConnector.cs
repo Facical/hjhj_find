@@ -251,4 +251,39 @@ public class ServerConnector : MonoBehaviour
             }
         }
     }
+
+    // =================================================================================
+    // 기능 4: ★ [신규] 분실물 visibility 업데이트 (회수 처리)
+    // =================================================================================
+    public IEnumerator UpdateVisibility(int objectId, string visibility, System.Action<bool> onComplete)
+    {
+        string url = baseUrl + objectsPath + "/" + objectId + "/visibility";
+
+        // JSON 데이터 생성
+        string jsonBody = $"{{\"visibility\": \"{visibility}\"}}";
+        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonBody);
+
+        // PATCH 요청
+        using (UnityWebRequest request = new UnityWebRequest(url, "PATCH"))
+        {
+            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
+            request.downloadHandler = new DownloadHandlerBuffer();
+            request.SetRequestHeader("Content-Type", "application/json");
+
+            Debug.Log($"[ServerConnector] Visibility 업데이트 요청: {url}, body: {jsonBody}");
+
+            yield return request.SendWebRequest();
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                Debug.Log($"[ServerConnector] Visibility 업데이트 성공: {request.downloadHandler.text}");
+                onComplete(true);
+            }
+            else
+            {
+                Debug.LogError($"[ServerConnector] Visibility 업데이트 실패: {request.error}");
+                onComplete(false);
+            }
+        }
+    }
 }

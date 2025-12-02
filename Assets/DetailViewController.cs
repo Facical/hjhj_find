@@ -81,12 +81,15 @@ public class DetailViewController : MonoBehaviour
         // 분실물 위치 정보를 저장하고 씬 전환
         if (currentItem != null)
         {
+            // 위치 + ID + 이름을 함께 전달 (회수 시 사용)
             NavigationData.SetTargetPosition(
                 currentItem.anchor_x,
                 currentItem.anchor_y,
-                currentItem.anchor_z
+                currentItem.anchor_z,
+                currentItem.id,
+                currentItem.object_label
             );
-            Debug.Log($"[DetailView] 분실물 '{currentItem.object_label}' 위치로 안내 시작");
+            Debug.Log($"[DetailView] 분실물 '{currentItem.object_label}' (ID: {currentItem.id}) 위치로 안내 시작");
         }
 
         SceneManager.LoadScene("SampleScene");
